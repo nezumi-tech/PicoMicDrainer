@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Windows;
+using System.Windows.Media; // CompositionTarget のために追加
 using NAudio.Wave;
-// タスクトレイ機能のために追加
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -9,34 +9,37 @@ namespace PicoMicDrainer
 {
     public partial class MainWindow : Window
     {
-        private const string TargetDeviceKeyword = "PicoStreamingMicrophone";
+        private const string TargetDeviceKeyword = "PicoStreaming";
         private WaveInEvent? _waveIn;
         private NotifyIcon? _notifyIcon;
-        private bool _isExitMode = false; // 本当に終了するかどうかのフラグ
+        private bool _isExitMode = false;
+
+        // 可視化用の変数
+        private volatile bool _isVisualizerEnabled = false;
+        private float _latestVolumePeak = 0f;
 
         public MainWindow()
         {
             InitializeComponent();
             SetupTrayIcon();
+
+            // WPFの描画フレーム同期イベントを登録（メーターの滑らかな更新用）
+            CompositionTarget.Rendering += OnRendering;
         }
 
-        // タスクトレイアイコンの設定
         private void SetupTrayIcon()
         {
             _notifyIcon = new NotifyIcon();
-            // Windows標準のアプリアイコンを使用
             _notifyIcon.Icon = SystemIcons.Application;
             _notifyIcon.Visible = true;
             _notifyIcon.Text = "PICO Mic Drainer";
 
-            // アイコンをダブルクリックした時の処理（ウィンドウを表示）
             _notifyIcon.DoubleClick += (s, e) =>
             {
                 this.Show();
                 this.WindowState = WindowState.Normal;
             };
 
-            // 右クリックメニューの設定
             var contextMenu = new ContextMenuStrip();
             contextMenu.Items.Add("ログを表示", null, (s, e) =>
             {
@@ -45,7 +48,7 @@ namespace PicoMicDrainer
             });
             contextMenu.Items.Add("終了する", null, (s, e) =>
             {
-                _isExitMode = true; // 終了フラグを立てる
+                _isExitMode = true;
                 System.Windows.Application.Current.Shutdown();
             });
 
@@ -86,19 +89,67 @@ namespace PicoMicDrainer
                 _waveIn = new WaveInEvent
                 {
                     DeviceNumber = deviceNumber,
-                    WaveFormat = new WaveFormat(48000, 1),
+                    WaveFormat = new WaveFormat(48000, 1), // 48kHz, モノラル (16bit PCM)
                     BufferMilliseconds = 50
                 };
 
-                _waveIn.DataAvailable += (s, a) => { /* 何もしない（捨てる） */ };
+                // データ受信時の処理（超軽量化設計）
+                _waveIn.DataAvailable += (s, a) =>
+                {
+                    // チェックボックスがオフなら、解析を一切スキップして即座に終了（バッファ消費最優先）
+                    if (!_isVisualizerEnabled) return;
+
+                    float max = 0f;
+                    // 16bit PCMは2バイトで1サンプル。バッファ内の最大絶対値を検索
+                    for (int i = 0; i < a.BytesRecorded; i += 2)
+                    {
+                        short sample = BitConverter.ToInt16(a.Buffer, i);
+                        float sample32 = sample / 32768f; // -1.0 〜 1.0 に正規化
+                        if (Math.Abs(sample32) > max)
+                        {
+                            max = Math.Abs(sample32);
+                        }
+                    }
+
+                    // 最新のピーク値を保持（UIスレッド側がこれを拾って描画する）
+                    _latestVolumePeak = max;
+                };
+
                 _waveIn.StartRecording();
 
                 AddLog("\nマイクストリームの消費を開始しました！");
-                AddLog("※ウィンドウを閉じても、タスクトレイで動作し続けます。");
             }
             catch (Exception ex)
             {
                 AddLog($"\n[エラー] マイクのオープンに失敗しました: {ex.Message}");
+            }
+        }
+
+        // チェックボックスの状態変更イベント
+        private void VisualizerCheck_Changed(object sender, RoutedEventArgs e)
+        {
+            _isVisualizerEnabled = VisualizerCheck.IsChecked ?? false;
+            if (!_isVisualizerEnabled)
+            {
+                _latestVolumePeak = 0f;
+            }
+        }
+
+        // WPFの画面描画（リフレッシュレート）と同期して呼ばれる軽量ループ
+        private void OnRendering(object sender, EventArgs e)
+        {
+            if (_isVisualizerEnabled)
+            {
+                // 0.0〜1.0 のピーク値を 0〜100 のパーセンテージに変換してメーターに反映
+                VolumeBar.Value = _latestVolumePeak * 100;
+
+                // メーターがカクつかずスムーズに減少するよう、少しずつ減衰（フォールオフ）させる
+                _latestVolumePeak *= 0.85f;
+                if (_latestVolumePeak < 0.001f) _latestVolumePeak = 0f;
+            }
+            else
+            {
+                if (VolumeBar.Value > 0) VolumeBar.Value = 0;
             }
         }
 
@@ -107,18 +158,17 @@ namespace PicoMicDrainer
             LogText.Text += message + "\n";
         }
 
-        // ウィンドウを閉じるときの処理
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             if (!_isExitMode)
             {
-                // 右クリックから「終了する」を選んでいない場合（[X]ボタン等）は、ウィンドウを隠すだけ
                 e.Cancel = true;
                 this.Hide();
                 return;
             }
 
-            // 本当の終了処理
+            CompositionTarget.Rendering -= OnRendering;
+
             if (_waveIn != null)
             {
                 _waveIn.StopRecording();
@@ -126,7 +176,7 @@ namespace PicoMicDrainer
             }
             if (_notifyIcon != null)
             {
-                _notifyIcon.Visible = false; // アイコンを消す
+                _notifyIcon.Visible = false;
                 _notifyIcon.Dispose();
             }
         }
