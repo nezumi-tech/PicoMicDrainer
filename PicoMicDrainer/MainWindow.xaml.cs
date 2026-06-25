@@ -136,7 +136,7 @@ namespace PicoMicDrainer
         }
 
         // WPFの画面描画（リフレッシュレート）と同期して呼ばれる軽量ループ
-        private void OnRendering(object sender, EventArgs e)
+        private void OnRendering(object? sender, EventArgs e)
         {
             if (_isVisualizerEnabled)
             {
