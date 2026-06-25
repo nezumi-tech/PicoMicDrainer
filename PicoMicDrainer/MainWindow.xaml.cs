@@ -126,7 +126,7 @@ namespace PicoMicDrainer
         }
 
         // チェックボックスの状態変更イベント
-        private void VisualizerCheck_Changed(object sender, RoutedEventArgs e)
+        private void VisualizerCheck_Changed(object? sender, RoutedEventArgs e)
         {
             _isVisualizerEnabled = VisualizerCheck.IsChecked ?? false;
             if (!_isVisualizerEnabled)

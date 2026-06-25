@@ -27,7 +27,7 @@ jobs:
 
     - name: 単一ファイル(.exe)として発行 (Publish)
       # Visual Studioの「発行」と同じ処理をコマンドラインで実行します
-      run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o ./publish_output
+      run: dotnet publish PicoMicDrainer/PicoMicDrainer.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o ./publish_output
       
     - name: ビルド成果物(Artifact)のアップロード
       uses: actions/upload-artifact@v4
