@@ -1,0 +1,36 @@
+name: Build WPF Application
+
+# ワークフローが実行される条件
+on:
+  push:
+    branches: [ "main" ] # mainブランチにコードがプッシュされた時
+  pull_request:
+    branches: [ "main" ] # mainブランチへPRが作成された時
+  workflow_dispatch:     # GitHubの画面から手動で実行できるようにする設定
+
+jobs:
+  build:
+    # WPFアプリのビルドにはWindows環境が必須
+    runs-on: windows-latest
+
+    steps:
+    - name: リポジトリのチェックアウト
+      uses: actions/checkout@v4
+
+    - name: .NET 10.0 のセットアップ
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: 依存関係の復元 (Restore)
+      run: dotnet restore
+
+    - name: 単一ファイル(.exe)として発行 (Publish)
+      # Visual Studioの「発行」と同じ処理をコマンドラインで実行します
+      run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o ./publish_output
+      
+    - name: ビルド成果物(Artifact)のアップロード
+      uses: actions/upload-artifact@v4
+      with:
+        name: PicoMicDrainer-Release
+        path: ./publish_output/*.exe
