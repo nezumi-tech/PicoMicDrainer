@@ -30,7 +30,7 @@ jobs:
       run: dotnet publish PicoMicDrainer/PicoMicDrainer.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o ./publish_output
       
     - name: ビルド成果物(Artifact)のアップロード
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: PicoMicDrainer-Release
         path: ./publish_output/*.exe
