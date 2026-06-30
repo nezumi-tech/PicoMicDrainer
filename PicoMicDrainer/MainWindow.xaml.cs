@@ -162,11 +162,17 @@ namespace PicoMicDrainer
         {
             if (!_isExitMode)
             {
+                // 右クリックから「終了する」を選んでいない場合は、ウィンドウを隠す
                 e.Cancel = true;
                 this.Hide();
+
+                // ★追加：タスクトレイ格納時にチェックをOFFにして音声計算を止める
+                VisualizerCheck.IsChecked = false;
+
                 return;
             }
 
+            // 本当の終了処理
             CompositionTarget.Rendering -= OnRendering;
 
             if (_waveIn != null)
@@ -179,6 +185,17 @@ namespace PicoMicDrainer
                 _notifyIcon.Visible = false;
                 _notifyIcon.Dispose();
             }
+        }
+        // ウィンドウの状態が変わったときに呼ばれるメソッド
+        protected override void OnStateChanged(EventArgs e)
+        {
+            // 最小化されたら、ウィンドウを隠してチェックをOFFにする
+            if (WindowState == WindowState.Minimized)
+            {
+                this.Hide();
+                VisualizerCheck.IsChecked = false;
+            }
+            base.OnStateChanged(e);
         }
     }
 }
