@@ -246,7 +246,7 @@ namespace PicoMicDrainer
                     string cleanTag = tagName.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? tagName.Substring(1) : tagName;
 
                     // GitHubのバージョンと、現在のアプリのバージョン（.csprojで設定した値）を比較
-                    if (Version.TryParse(cleanTag, out Version latestVersion))
+                    if (Version.TryParse(cleanTag, out Version? latestVersion))
                     {
                         Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version!;
 
