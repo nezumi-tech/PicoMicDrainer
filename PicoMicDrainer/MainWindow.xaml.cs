@@ -4,12 +4,21 @@ using System.Windows.Media; // CompositionTarget のために追加
 using NAudio.Wave;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Reflection;
+using System.Diagnostics;
 
 namespace PicoMicDrainer
 {
     public partial class MainWindow : Window
     {
         private const string TargetDeviceKeyword = "PicoStreaming";
+
+        private const string GithubOwner = "nezumi-tech";
+        private const string GithubRepo = "PicoMicDrainer";
+
         private WaveInEvent? _waveIn;
         private NotifyIcon? _notifyIcon;
         private bool _isExitMode = false;
@@ -23,8 +32,11 @@ namespace PicoMicDrainer
             InitializeComponent();
             SetupTrayIcon();
 
-            // WPFの描画フレーム同期イベントを登録（メーターの滑らかな更新用）
+            // WPFの描画フレーム同期イベントを登録
             CompositionTarget.Rendering += OnRendering;
+
+            // 画面の表示状態に関わらず、生成と同時に起動処理を走らせる
+            _ = StartupProcessAsync();
         }
 
         private void SetupTrayIcon()
@@ -55,11 +67,16 @@ namespace PicoMicDrainer
             _notifyIcon.ContextMenuStrip = contextMenu;
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        private async Task StartupProcessAsync()
         {
+            // 少しだけ待機（UIスレッドの初期化を確実に終わらせるための安全策）
+            await Task.Delay(500);
+
             AddLog("--- PICO Connect マイクバッファ消費ツール ---");
             AddLog("デバイスを検索中...");
             StartDraining();
+
+            await CheckForUpdatesAsync();
         }
 
         private void StartDraining()
@@ -155,7 +172,15 @@ namespace PicoMicDrainer
 
         private void AddLog(string message)
         {
-            LogText.Text += message + "\n";
+            // UIを操作するため、確実にUIスレッド上で実行する
+            Dispatcher.Invoke(() =>
+            {
+                // ログのテキストを追記
+                LogText.Text += message + "\n";
+
+                // ★追加：ScrollViewer を自動的に一番下までスクロールさせる
+                LogScrollViewer.ScrollToEnd();
+            });
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -196,6 +221,75 @@ namespace PicoMicDrainer
                 VisualizerCheck.IsChecked = false;
             }
             base.OnStateChanged(e);
+        }
+        private async Task CheckForUpdatesAsync()
+        {
+            try
+            {
+                using var client = new HttpClient();
+                // GitHub API は User-Agent ヘッダーが必須です
+                client.DefaultRequestHeaders.Add("User-Agent", "PicoMicDrainer-UpdateChecker");
+
+                // 最新リリースの情報を取得するAPI URL
+                string url = $"https://api.github.com/repos/{GithubOwner}/{GithubRepo}/releases/latest";
+
+                var response = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(response);
+
+                // JSONからタグ名（例: "v1.0.1"）とリリースURLを取り出す
+                string? tagName = doc.RootElement.GetProperty("tag_name").GetString();
+                string? releaseUrl = doc.RootElement.GetProperty("html_url").GetString();
+
+                if (!string.IsNullOrEmpty(tagName))
+                {
+                    // "v1.0.1" などの先頭の 'v' を取り除いて "1.0.1" にする
+                    string cleanTag = tagName.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? tagName.Substring(1) : tagName;
+
+                    // GitHubのバージョンと、現在のアプリのバージョン（.csprojで設定した値）を比較
+                    if (Version.TryParse(cleanTag, out Version latestVersion))
+                    {
+                        Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version!;
+
+                        // GitHubのバージョンの方が新しい場合
+                        if (latestVersion > currentVersion)
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                // ウィンドウを隠し状態から復帰させる
+                                this.Show();
+                                this.WindowState = WindowState.Normal;
+                                this.Activate();
+
+                                // 専用のアップデートパネルを表示状態にする
+                                UpdatePanel.Visibility = Visibility.Visible;
+
+                                AddLog($"\n[通知] 最新バージョン (v{cleanTag}) が公開されました！");
+                                AddLog("画面上部のリンクからBOOTHにアクセスしてください。");
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // オフライン時やAPI制限時などにアプリが落ちないよう、エラーは握り潰す（何もしない）
+            }
+        }
+        private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = e.Uri.AbsoluteUri,
+                    UseShellExecute = true // これを true にしないと .NET Core/5+ ではブラウザが開きません
+                });
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                AddLog($"[エラー] ブラウザを開けませんでした: {ex.Message}");
+            }
         }
     }
 }
