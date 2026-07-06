@@ -8,6 +8,8 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <Platforms>AnyCPU;x64</Platforms>
+    <!--（アップデートするたびにここを書き換える）-->
+    <Version>3.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

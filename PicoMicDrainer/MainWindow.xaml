@@ -4,24 +4,42 @@
         Title="PICO Mic Drainer" Height="300" Width="450"
         Visibility="Hidden"
         ShowInTaskbar="False"
-        Loaded="Window_Loaded" Closing="Window_Closing">
+        Closing="Window_Closing">
     <Grid Margin="15">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <!-- 追加: アップデート通知用 -->
             <RowDefinition Height="*" />
+            <!-- ログ用 -->
             <RowDefinition Height="Auto" />
+            <!-- トグル用 -->
             <RowDefinition Height="Auto" />
+            <!-- メーター用 -->
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0" Margin="0,0,0,10">
+<!-- ★追加: アップデート通知パネル (初期状態は Visibility="Collapsed" で非表示) -->
+        <Border x:Name="UpdatePanel" Grid.Row="0" Background="#E6F2FF" BorderBrush="#0078D7" BorderThickness="1" Margin="0,0,0,10" Padding="10" Visibility="Collapsed">
+        <TextBlock TextWrapping="Wrap" FontSize="14">
+            <Run Text="✨ 新しいアップデートが利用可能です！" FontWeight="Bold" Foreground="#003366"/>
+            <LineBreak/>
+            <!-- ここにBOOTHのURLを設定します -->
+            <Hyperlink NavigateUri="https://nezumi-tech.booth.pm/items/8434266?utm_source=update_notice" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run Text="BOOTHの商品ページを開いて最新版をダウンロードする"/>
+            </Hyperlink>
+        </TextBlock>
+    </Border>
+
+        <!-- 既存のUI要素（Grid.Rowの番号を1つずつずらしています） -->
+        <ScrollViewer x:Name="LogScrollViewer" Grid.Row="1" Margin="0,0,0,10">
             <TextBlock x:Name="LogText" TextWrapping="Wrap" FontFamily="Consolas" FontSize="14" />
         </ScrollViewer>
 
-        <CheckBox x:Name="VisualizerCheck" Grid.Row="1" 
-                  Content="音声入力を可視化する（レベルメーター有効化）" 
-                  Margin="0,5,0,5" Checked="VisualizerCheck_Changed" Unchecked="VisualizerCheck_Changed"/>
+        <CheckBox x:Name="VisualizerCheck" Grid.Row="2" 
+              Content="音声入力を可視化する（レベルメーター有効化）" 
+              Margin="0,5,0,5" Checked="VisualizerCheck_Changed" Unchecked="VisualizerCheck_Changed"/>
 
-        <ProgressBar x:Name="VolumeBar" Grid.Row="2" 
-                     Height="15" Minimum="0" Maximum="100" Value="0" 
-                     Foreground="#FF00FF7F" Background="#FF333333" BorderThickness="0"/>
+        <ProgressBar x:Name="VolumeBar" Grid.Row="3" 
+                 Height="15" Minimum="0" Maximum="100" Value="0" 
+                 Foreground="#FF00FF7F" Background="#FF333333" BorderThickness="0"/>
     </Grid>
 </Window>
