@@ -104,7 +104,8 @@ namespace PicoMicDrainer
         {
             var assembly = Assembly.GetExecutingAssembly();
             var informationalVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
-            return $"--- PICO Connect マイクバッファ消費ツール v{informationalVersion} ---";
+            var cleanVersion = informationalVersion.Split('+')[0];
+            return $"--- PICO Connect マイクバッファ消費ツール v{cleanVersion} ---";
         }
 
         private void StartDraining()
