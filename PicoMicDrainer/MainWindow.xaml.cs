@@ -42,7 +42,28 @@ namespace PicoMicDrainer
         private void SetupTrayIcon()
         {
             _notifyIcon = new NotifyIcon();
-            _notifyIcon.Icon = SystemIcons.Application;
+            try
+            {
+                // 埋め込みリソースから app.ico を読み込む
+                var assembly = Assembly.GetExecutingAssembly();
+                using (var stream = assembly.GetManifestResourceStream("PicoMicDrainer.app.ico"))
+                {
+                    if (stream != null)
+                    {
+                        _notifyIcon.Icon = new Icon(stream);
+                    }
+                    else
+                    {
+                        Debug.WriteLine("Warning: app.ico リソースが見つかりません。デフォルトアイコンを使用します。");
+                        _notifyIcon.Icon = SystemIcons.Application;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error: タスクトレイアイコンの読み込みに失敗しました: {ex.Message}");
+                _notifyIcon.Icon = SystemIcons.Application;
+            }
             _notifyIcon.Visible = true;
             _notifyIcon.Text = "PICO Mic Drainer";
 
