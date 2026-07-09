@@ -93,11 +93,18 @@ namespace PicoMicDrainer
             // 少しだけ待機（UIスレッドの初期化を確実に終わらせるための安全策）
             await Task.Delay(500);
 
-            AddLog("--- PICO Connect マイクバッファ消費ツール ---");
+            AddLog(GetApplicationHeader());
             AddLog("デバイスを検索中...");
             StartDraining();
 
             await CheckForUpdatesAsync();
+        }
+
+        private string GetApplicationHeader()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            var informationalVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
+            return $"--- PICO Connect マイクバッファ消費ツール v{informationalVersion} ---";
         }
 
         private void StartDraining()
