@@ -7,6 +7,8 @@ PICO 4 Ultra などのVRヘッドセットをPC（PICO Connect）に接続して
 PICO Connect経由でVRChatなどを長時間プレイしたり、ワールド移動を繰り返したりすると、マイク（PicoStreamingMicrophone）の音声遅延が徐々にひどくなる（数百ミリ秒〜1秒以上）現象が報告されています。
 これは内部でマイクのバッファが滞留してしまうことが原因です。
 
+参考: https://gist.github.com/fz6m/337aa44c27a7bde449ccff0e352f3040
+
 本ツールは、バックグラウンドで `PicoStreamingMicrophone` の音声ストリームを常に開き、データを「読み込んで捨てる」処理を続けることで、バッファの滞留と遅延の蓄積を防ぎます。
 
 ## 特徴
