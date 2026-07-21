@@ -31,6 +31,7 @@ namespace PicoMicDrainer
         public MainWindow()
         {
             InitializeComponent();
+            ApplyLocalization();
             SetupTrayIcon();
 
             // WPFの描画フレーム同期イベントを登録
@@ -38,6 +39,13 @@ namespace PicoMicDrainer
 
             // 画面の表示状態に関わらず、生成と同時に起動処理を走らせる
             _ = StartupProcessAsync();
+        }
+
+        private void ApplyLocalization()
+        {
+            UpdateTitleRun.Text = Localization.UpdateAvailable;
+            DownloadLinkRun.Text = Localization.DownloadLatest;
+            VisualizerCheck.Content = Localization.VisualizerCheckbox;
         }
 
         private void SetupTrayIcon()
@@ -75,12 +83,12 @@ namespace PicoMicDrainer
             };
 
             var contextMenu = new ContextMenuStrip();
-            contextMenu.Items.Add("ログを表示", null, (s, e) =>
+            contextMenu.Items.Add(Localization.MenuShowLog, null, (s, e) =>
             {
                 this.Show();
                 this.WindowState = WindowState.Normal;
             });
-            contextMenu.Items.Add("終了する", null, (s, e) =>
+            contextMenu.Items.Add(Localization.MenuExit, null, (s, e) =>
             {
                 _isExitMode = true;
                 System.Windows.Application.Current.Shutdown();
@@ -94,9 +102,9 @@ namespace PicoMicDrainer
             // 少しだけ待機（UIスレッドの初期化を確実に終わらせるための安全策）
             await Task.Delay(500);
 
-            AddLog("PICO Connect マイクバッファ消費ツール");
+            AddLog(Localization.AppTitle);
             AddLog(GetApplicationHeader());
-            AddLog("デバイスを検索中...");
+            AddLog(Localization.SearchingDevices);
             StartDraining();
 
             await CheckForUpdatesAsync();
@@ -125,12 +133,12 @@ namespace PicoMicDrainer
 
             if (deviceNumber == -1)
             {
-                AddLog($"\n[エラー] '{TargetDeviceKeyword}' を含むマイクが見つかりませんでした。");
+                AddLog(string.Format(Localization.ErrorDeviceNotFound, TargetDeviceKeyword));
                 return;
             }
 
             var deviceInfo = WaveIn.GetCapabilities(deviceNumber);
-            AddLog($"\n[成功] 対象デバイスを検出しました: {deviceInfo.ProductName}");
+            AddLog(string.Format(Localization.SuccessDeviceDetected, deviceInfo.ProductName));
 
             try
             {
@@ -165,11 +173,11 @@ namespace PicoMicDrainer
 
                 _waveIn.StartRecording();
 
-                AddLog("\nマイクストリームの消費を開始しました！");
+                AddLog(Localization.StreamStarted);
             }
             catch (Exception ex)
             {
-                AddLog($"\n[エラー] マイクのオープンに失敗しました: {ex.Message}");
+                AddLog(string.Format(Localization.ErrorMicOpenFailed, ex.Message));
             }
         }
 
@@ -294,8 +302,8 @@ namespace PicoMicDrainer
                                 // 専用のアップデートパネルを表示状態にする
                                 UpdatePanel.Visibility = Visibility.Visible;
 
-                                AddLog($"\n[通知] 最新バージョン (v{cleanTag}) が公開されました！");
-                                AddLog("画面上部のリンクからBOOTHにアクセスしてください。");
+                                AddLog(string.Format(Localization.UpdateAvailableLog, cleanTag));
+                                AddLog(Localization.UpdateAccessBooth);
                             });
                         }
                     }
@@ -319,7 +327,7 @@ namespace PicoMicDrainer
             }
             catch (Exception ex)
             {
-                AddLog($"[エラー] ブラウザを開けませんでした: {ex.Message}");
+                AddLog(string.Format(Localization.ErrorBrowserFailed, ex.Message));
             }
         }
     }
