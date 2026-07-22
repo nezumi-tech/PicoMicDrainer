@@ -1,14 +1,15 @@
-﻿using System;
-using System.Windows;
-using System.Windows.Media; // CompositionTarget のために追加
+﻿using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using System;
+using System.Diagnostics;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Reflection;
-using System.Diagnostics;
+using System.Windows;
+using System.Windows.Forms;
+using System.Windows.Media; // CompositionTarget のために追加
 
 namespace PicoMicDrainer
 {
@@ -65,7 +66,7 @@ namespace PicoMicDrainer
                 _notifyIcon.Icon = SystemIcons.Application;
             }
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "PICO Mic Drainer";
+            _notifyIcon.Text = "Pico Mic Drainer";
 
             _notifyIcon.DoubleClick += (s, e) =>
             {
@@ -93,6 +94,7 @@ namespace PicoMicDrainer
             // 少しだけ待機（UIスレッドの初期化を確実に終わらせるための安全策）
             await Task.Delay(500);
 
+            AddLog("PICO Connect マイクバッファ消費ツール");
             AddLog(GetApplicationHeader());
             AddLog("デバイスを検索中...");
             StartDraining();
@@ -105,7 +107,7 @@ namespace PicoMicDrainer
             var assembly = Assembly.GetExecutingAssembly();
             var informationalVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
             var cleanVersion = informationalVersion.Split('+')[0];
-            return $"--- PICO Connect マイクバッファ消費ツール v{cleanVersion} ---";
+            return $"--- Pico Mic Drainer v{cleanVersion} ---";
         }
 
         private void StartDraining()
