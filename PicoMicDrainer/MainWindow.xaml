@@ -20,11 +20,11 @@
 <!-- ★追加: アップデート通知パネル (初期状態は Visibility="Collapsed" で非表示) -->
         <Border x:Name="UpdatePanel" Grid.Row="0" Background="#E6F2FF" BorderBrush="#0078D7" BorderThickness="1" Margin="0,0,0,10" Padding="10" Visibility="Collapsed">
         <TextBlock TextWrapping="Wrap" FontSize="14">
-            <Run Text="✨ 新しいアップデートが利用可能です！" FontWeight="Bold" Foreground="#003366"/>
+            <Run x:Name="UpdateTitleRun" FontWeight="Bold" Foreground="#003366"/>
             <LineBreak/>
             <!-- ここにBOOTHのURLを設定します -->
             <Hyperlink NavigateUri="https://nezumi-tech.booth.pm/items/8434266?utm_source=update_notice" RequestNavigate="Hyperlink_RequestNavigate">
-                <Run Text="BOOTHの商品ページを開いて最新版をダウンロードする"/>
+                <Run x:Name="DownloadLinkRun"/>
             </Hyperlink>
         </TextBlock>
     </Border>
@@ -35,7 +35,6 @@
         </ScrollViewer>
 
         <CheckBox x:Name="VisualizerCheck" Grid.Row="2" 
-              Content="音声入力を可視化する（レベルメーター有効化）" 
               Margin="0,5,0,5" Checked="VisualizerCheck_Changed" Unchecked="VisualizerCheck_Changed"/>
 
         <ProgressBar x:Name="VolumeBar" Grid.Row="3" 
