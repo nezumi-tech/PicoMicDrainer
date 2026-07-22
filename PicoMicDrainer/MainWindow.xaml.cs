@@ -66,7 +66,7 @@ namespace PicoMicDrainer
                 _notifyIcon.Icon = SystemIcons.Application;
             }
             _notifyIcon.Visible = true;
-            _notifyIcon.Text = "PicoMicDrainer";
+            _notifyIcon.Text = "Pico Mic Drainer";
 
             _notifyIcon.DoubleClick += (s, e) =>
             {
@@ -107,7 +107,7 @@ namespace PicoMicDrainer
             var assembly = Assembly.GetExecutingAssembly();
             var informationalVersion = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
             var cleanVersion = informationalVersion.Split('+')[0];
-            return $"--- PicoMicDrainer v{cleanVersion} ---";
+            return $"--- Pico Mic Drainer v{cleanVersion} ---";
         }
 
         private void StartDraining()

@@ -1,4 +1,4 @@
-# PICOMicDrainer
+# Pico Mic Drainer
 
 PICO 4 Ultra などのVRヘッドセットをPC（PICO Connect）に接続して遊ぶ際、マイクの遅延が蓄積していく問題を防止するための、超軽量な常駐型Windowsユーティリティです。
 
