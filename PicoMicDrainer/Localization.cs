@@ -19,6 +19,16 @@ namespace PicoMicDrainer
             ? "音声入力を可視化する（レベルメーター有効化）"
             : "Visualize audio input (enable level meter)";
 
+        // スタートアップ登録のチェックボックス
+        public static string StartupCheckbox => IsJapanese
+            ? "Windows起動時に自動で開始する（スタートアップ登録）"
+            : "Start automatically with Windows (Register to Startup)";
+
+        public static string StartupPromptText => IsJapanese
+            ? "💡 毎回手動で起動する手間を省きませんか？\n下のチェックをいれると、Windows起動時に自動で開始できます！"
+            : "💡 Save time by skipping manual launches!\nCheck the box below to start automatically with Windows!";
+
+
         // MainWindow.xaml.cs - Logs & Messages
         public static string AppTitle => IsJapanese
             ? "PICO Connect マイクバッファ消費ツール"
@@ -47,6 +57,19 @@ namespace PicoMicDrainer
         public static string ErrorBrowserFailed => IsJapanese
             ? "[エラー] ブラウザを開けませんでした: {0}"
             : "[Error] Could not open browser: {0}";
+
+        // スタートアップ関連のログ
+        public static string StartupRegistered => IsJapanese
+            ? "[システム] スタートアップに登録しました。"
+            : "[System] Registered to startup.";
+
+        public static string StartupUnregistered => IsJapanese
+            ? "[システム] スタートアップから解除しました。"
+            : "[System] Unregistered from startup.";
+
+        public static string ErrorStartupFailed => IsJapanese
+            ? "[エラー] スタートアップ設定の変更に失敗しました: {0}"
+            : "[Error] Failed to change startup settings: {0}";
 
         // Update notification
         public static string UpdateAvailableLog => IsJapanese

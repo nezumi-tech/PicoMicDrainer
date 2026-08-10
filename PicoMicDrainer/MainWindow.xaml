@@ -7,17 +7,15 @@
         Closing="Window_Closing">
     <Grid Margin="15">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <!-- 追加: アップデート通知用 -->
-            <RowDefinition Height="*" />
-            <!-- ログ用 -->
-            <RowDefinition Height="Auto" />
-            <!-- トグル用 -->
-            <RowDefinition Height="Auto" />
-            <!-- メーター用 -->
+            <RowDefinition Height="Auto" /> <!-- アップデート通知用 -->
+            <RowDefinition Height="*" />    <!-- ログ用 -->
+            <RowDefinition Height="Auto" /> <!-- スタートアップ推奨パネル用 -->
+            <RowDefinition Height="Auto" /> <!-- スタートアップチェックボックス用 -->
+            <RowDefinition Height="Auto" /> <!-- メータートグル用 -->
+            <RowDefinition Height="Auto" /> <!-- メーター用 -->
         </Grid.RowDefinitions>
 
-<!-- ★追加: アップデート通知パネル (初期状態は Visibility="Collapsed" で非表示) -->
+<!-- アップデート通知パネル (初期状態は Visibility="Collapsed" で非表示) -->
         <Border x:Name="UpdatePanel" Grid.Row="0" Background="#E6F2FF" BorderBrush="#0078D7" BorderThickness="1" Margin="0,0,0,10" Padding="10" Visibility="Collapsed">
         <TextBlock TextWrapping="Wrap" FontSize="14">
             <Run x:Name="UpdateTitleRun" FontWeight="Bold" Foreground="#003366"/>
@@ -34,10 +32,21 @@
             <TextBlock x:Name="LogText" TextWrapping="Wrap" FontFamily="Consolas" FontSize="14" />
         </ScrollViewer>
 
-        <CheckBox x:Name="VisualizerCheck" Grid.Row="2" 
+        <!-- 追加: スタートアップ推奨パネル (未登録時に表示) -->
+        <Border x:Name="StartupPromptPanel" Grid.Row="2" Background="#FFF4CE" BorderBrush="#D29200" BorderThickness="1" Margin="0,0,0,5" Padding="8" Visibility="Collapsed">
+            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#333333">
+            <Run x:Name="StartupPromptRun" />
+            </TextBlock>
+        </Border>
+
+        <!-- スタートアップ登録用のチェックボックス -->
+        <CheckBox x:Name="StartupCheck" Grid.Row="3" 
+                  Margin="0,5,0,0" Checked="StartupCheck_Changed" Unchecked="StartupCheck_Changed"/>
+
+        <CheckBox x:Name="VisualizerCheck" Grid.Row="4" 
               Margin="0,5,0,5" Checked="VisualizerCheck_Changed" Unchecked="VisualizerCheck_Changed"/>
 
-        <ProgressBar x:Name="VolumeBar" Grid.Row="3" 
+        <ProgressBar x:Name="VolumeBar" Grid.Row="5" 
                  Height="15" Minimum="0" Maximum="100" Value="0" 
                  Foreground="#FF00FF7F" Background="#FF333333" BorderThickness="0"/>
     </Grid>
