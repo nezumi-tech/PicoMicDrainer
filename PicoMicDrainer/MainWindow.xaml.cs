@@ -3,6 +3,7 @@ using NAudio.Wave;
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -24,6 +25,9 @@ namespace PicoMicDrainer
         private NotifyIcon? _notifyIcon;
         private bool _isExitMode = false;
 
+        // UI更新フラグ
+        private bool _isUpdatingStartupUI = false; // ★追加
+
         // 可視化用の変数
         private volatile bool _isVisualizerEnabled = false;
         private float _latestVolumePeak = 0f;
@@ -37,6 +41,9 @@ namespace PicoMicDrainer
             // WPFの描画フレーム同期イベントを登録
             CompositionTarget.Rendering += OnRendering;
 
+            // 起動時にスタートアップ登録状態をチェックしてUIに反映する
+            CheckStartupStatus();
+
             // 画面の表示状態に関わらず、生成と同時に起動処理を走らせる
             _ = StartupProcessAsync();
         }
@@ -46,6 +53,8 @@ namespace PicoMicDrainer
             UpdateTitleRun.Text = Localization.UpdateAvailable;
             DownloadLinkRun.Text = Localization.DownloadLatest;
             VisualizerCheck.Content = Localization.VisualizerCheckbox;
+            StartupCheck.Content = Localization.StartupCheckbox;
+            StartupPromptRun.Text = Localization.StartupPromptText;
         }
 
         private void SetupTrayIcon()
@@ -328,6 +337,85 @@ namespace PicoMicDrainer
             catch (Exception ex)
             {
                 AddLog(string.Format(Localization.ErrorBrowserFailed, ex.Message));
+            }
+        }
+
+        private string GetStartupShortcutPath()
+        {
+            string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            return Path.Combine(startupFolder, "Pico Mic Drainer.lnk");
+        }
+
+        // 起動時のチェック処理
+        private void CheckStartupStatus()
+        {
+            _isUpdatingStartupUI = true;
+
+            bool isRegistered = File.Exists(GetStartupShortcutPath());
+            StartupCheck.IsChecked = isRegistered;
+
+            // 未登録(false)ならパネルを表示、登録済み(true)なら隠す
+            StartupPromptPanel.Visibility = isRegistered ? Visibility.Collapsed : Visibility.Visible;
+
+            _isUpdatingStartupUI = false;
+
+            // ウィンドウの生成処理が完了した直後に実行されるよう、
+            // Dispatcher.InvokeAsync を使って表示処理をスケジュールします。
+            if (!isRegistered)
+            {
+                Dispatcher.InvokeAsync(() =>
+                {
+                    this.Show();
+                    this.WindowState = WindowState.Normal;
+                    this.Activate(); // ウィンドウをアクティブ（最前面）にする
+                });
+            }
+        }
+
+        // チェックボックスがクリックされた時の処理
+        private void StartupCheck_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isUpdatingStartupUI) return;
+
+            bool isEnabled = StartupCheck.IsChecked ?? false;
+
+            StartupPromptPanel.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;
+
+            string shortcutPath = GetStartupShortcutPath();
+
+            string? exePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(exePath)) return;
+
+            try
+            {
+                if (isEnabled)
+                {
+                    // WScript.Shellを動的に呼び出してショートカットを作成
+                    Type? t = Type.GetTypeFromProgID("WScript.Shell");
+                    if (t != null)
+                    {
+                        dynamic shell = Activator.CreateInstance(t)!;
+                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                        shortcut.TargetPath = exePath;
+                        shortcut.WorkingDirectory = Path.GetDirectoryName(exePath);
+                        shortcut.Description = "Pico Mic Drainer";
+                        shortcut.Save();
+
+                        AddLog(Localization.StartupRegistered);
+                    }
+                }
+                else
+                {
+                    if (File.Exists(shortcutPath))
+                    {
+                        File.Delete(shortcutPath);
+                        AddLog(Localization.StartupUnregistered);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog(string.Format(Localization.ErrorStartupFailed, ex.Message));
             }
         }
     }
