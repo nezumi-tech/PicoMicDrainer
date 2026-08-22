@@ -266,15 +266,26 @@ namespace PicoMicDrainer
 
         /// <summary>
         /// 録音ストリームが停止したイベント。異常停止（例外付き）のときのみログを出す。
-        /// 再接続そのものはリトライタイマー (_reconnectTimer) が担当する。
+        /// バグC修正：異常停止時はリトライタイマーの次 tick を待たずに即座に再接続を試みる。
         /// </summary>
         private void OnWaveInRecordingStopped(object? sender, StoppedEventArgs e)
         {
             _isStreamRunning = false;
 
-            if (e.Exception != null && !_isExitMode && !_isShuttingDown)
+            // バグC修正：「現在の」インスタンスからのイベントのみ処理する。
+            // 再接続・終了後に古いインスタンスの遅れたイベントが届いても、新しいストリームに影響させない。
+            if (!ReferenceEquals(sender, _waveIn)) return;
+
+            // 終了中は Window_Closing がタイマー停止・破棄を担うため、ここでは何もしない。
+            if (_isExitMode || _isShuttingDown) return;
+
+            if (e.Exception != null)
             {
                 AddLog(string.Format(Localization.ErrorStreamDisconnected, e.Exception.Message));
+
+                // バグC修正：異常停止（デバイス切断・PICO Connect のクラッシュ等）時は即座に再接続を試みる。
+                // 従来はリトライタイマーの次 tick まで（最大 ReconnectInterval = 3秒）バッファ消費が止まったままになっていた。
+                Dispatcher.BeginInvoke(new Action(() => { StartDraining(); }));
             }
         }
 
