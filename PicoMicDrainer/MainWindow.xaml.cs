@@ -37,6 +37,11 @@ namespace PicoMicDrainer
         private NotifyIcon? _notifyIcon;
         private bool _isExitMode = false;
 
+        // バグ3修正用：終了処理開始フラグ。
+        // 終了中は AddLog（Dispatcher.Invoke）や再接続リトライを実行しないことで、
+        // シャットダウン済みディスパッチャへの呼び出しによる例外を防ぐ。
+        private volatile bool _isShuttingDown = false;
+
         // UI更新フラグ
         private bool _isUpdatingStartupUI = false; // ★追加
 
@@ -244,7 +249,7 @@ namespace PicoMicDrainer
         {
             _isStreamRunning = false;
 
-            if (e.Exception != null && !_isExitMode)
+            if (e.Exception != null && !_isExitMode && !_isShuttingDown)
             {
                 AddLog(string.Format(Localization.ErrorStreamDisconnected, e.Exception.Message));
             }
@@ -256,7 +261,7 @@ namespace PicoMicDrainer
         /// </summary>
         private void OnReconnectTick(object? sender, EventArgs e)
         {
-            if (_isExitMode) return;
+            if (_isExitMode || _isShuttingDown) return;
 
             // 正常に消費中なら何もしない
             if (_waveIn != null && _isStreamRunning) return;
@@ -294,8 +299,19 @@ namespace PicoMicDrainer
 
         private void AddLog(string message)
         {
-            // UIを操作するため、確実にUIスレッド上で実行する
-            Dispatcher.Invoke(() => AppendLogCore(message));
+            // バグ3修正：終了処理中はログを書かない（シャットダウン済みディスパッチャへの Invoke は例外になるため）
+            if (_isShuttingDown) return;
+
+            // UIを操作するため、確実にUIスレッド上で実行する。
+            // 終了直後の競合で Dispatcher が既に無効化されていた場合は安全に無視する。
+            try
+            {
+                Dispatcher.Invoke(() => AppendLogCore(message));
+            }
+            catch (Exception)
+            {
+                // アプリ終了直後の呼ばれ（未観測タスク例外にならないように握り潰す）
+            }
         }
 
         /// <summary>ログを TextBlock に追記し、行数が上限を超えたら古い行を削除する。</summary>
@@ -352,6 +368,10 @@ namespace PicoMicDrainer
             }
 
             // 本当の終了処理
+            // バグ3修正：最初にフラグを立てることで、終了中にイベントハンドラ・非同期処理から
+            // AddLog（Dispatcher.Invoke）が呼ばれても安全に無視されるようにする。
+            _isShuttingDown = true;
+
             CompositionTarget.Rendering -= OnRendering;
 
             // 再接続リトライタイマーを停止する
@@ -411,6 +431,9 @@ namespace PicoMicDrainer
                         // GitHubのバージョンの方が新しい場合
                         if (latestVersion > currentVersion)
                         {
+                            // バグ3修正：終了中に結果が帰ってきてもUIを更新しない（Dispatcher.Invoke が例外になるため）
+                            if (_isShuttingDown) return;
+
                             Dispatcher.Invoke(() =>
                             {
                                 // ウィンドウを隠し状態から復帰させる
