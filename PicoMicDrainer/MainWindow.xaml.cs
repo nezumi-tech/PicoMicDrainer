@@ -42,6 +42,9 @@ namespace PicoMicDrainer
         // シャットダウン済みディスパッチャへの呼び出しによる例外を防ぐ。
         private volatile bool _isShuttingDown = false;
 
+        // バグ8修正用：CompositionTarget.Rendering に登録済みか（ウィンドウ非表示中は解除して毎フレームの無駄な呼び出しを止める）
+        private bool _renderingHooked = false;
+
         // UI更新フラグ
         private bool _isUpdatingStartupUI = false; // ★追加
 
@@ -55,14 +58,33 @@ namespace PicoMicDrainer
             ApplyLocalization();
             SetupTrayIcon();
 
-            // WPFの描画フレーム同期イベントを登録
-            CompositionTarget.Rendering += OnRendering;
+            // WPFの描画フレーム同期イベントを登録（バグ8修正：ウィンドウ非表示中は解除する）
+            HookRendering(true);
 
             // 起動時にスタートアップ登録状態をチェックしてUIに反映する
             CheckStartupStatus();
 
             // 画面の表示状態に関わらず、生成と同時に起動処理を走らせる
             _ = StartupProcessAsync();
+        }
+
+        /// <summary>
+        /// バグ8修正用：CompositionTarget.Rendering の購読/解除を行う。
+        /// ウィンドウが隠れている（トレイ格納・最小化）間も毎フレーム OnRendering が呼ばれ続けるのを防ぐため、
+        /// 非表示時は解除し、再表示時に再接続する。
+        /// </summary>
+        private void HookRendering(bool hook)
+        {
+            if (hook && !_renderingHooked)
+            {
+                CompositionTarget.Rendering += OnRendering;
+                _renderingHooked = true;
+            }
+            else if (!hook && _renderingHooked)
+            {
+                CompositionTarget.Rendering -= OnRendering;
+                _renderingHooked = false;
+            }
         }
 
         private void ApplyLocalization()
@@ -102,18 +124,10 @@ namespace PicoMicDrainer
             _notifyIcon.Visible = true;
             _notifyIcon.Text = "Pico Mic Drainer";
 
-            _notifyIcon.DoubleClick += (s, e) =>
-            {
-                this.Show();
-                this.WindowState = WindowState.Normal;
-            };
+            _notifyIcon.DoubleClick += (s, e) => ShowFromTray();
 
             var contextMenu = new ContextMenuStrip();
-            contextMenu.Items.Add(Localization.MenuShowLog, null, (s, e) =>
-            {
-                this.Show();
-                this.WindowState = WindowState.Normal;
-            });
+            contextMenu.Items.Add(Localization.MenuShowLog, null, (s, e) => ShowFromTray());
             contextMenu.Items.Add(Localization.MenuExit, null, (s, e) =>
             {
                 _isExitMode = true;
@@ -121,6 +135,15 @@ namespace PicoMicDrainer
             });
 
             _notifyIcon.ContextMenuStrip = contextMenu;
+        }
+
+        /// <summary>トレイからウィンドウを再表示する。</summary>
+        private void ShowFromTray()
+        {
+            this.Show();
+            this.WindowState = WindowState.Normal;
+            // バグ8修正：再表示に合わせて描画フレーム同期イベントを再接続する
+            HookRendering(true);
         }
 
         private async Task StartupProcessAsync()
@@ -364,6 +387,10 @@ namespace PicoMicDrainer
                 // ★追加：タスクトレイ格納時にチェックをOFFにして音声計算を止める
                 VisualizerCheck.IsChecked = false;
 
+                // バグ8修正：非表示中は描画フレーム同期イベントを解除し、毎フレームの無駄な呼び出しを止める
+                VolumeBar.Value = 0;
+                HookRendering(false);
+
                 return;
             }
 
@@ -372,7 +399,7 @@ namespace PicoMicDrainer
             // AddLog（Dispatcher.Invoke）が呼ばれても安全に無視されるようにする。
             _isShuttingDown = true;
 
-            CompositionTarget.Rendering -= OnRendering;
+            HookRendering(false);
 
             // 再接続リトライタイマーを停止する
             if (_reconnectTimer != null)
@@ -397,6 +424,10 @@ namespace PicoMicDrainer
             {
                 this.Hide();
                 VisualizerCheck.IsChecked = false;
+
+                // バグ8修正：非表示中は描画フレーム同期イベントを解除する
+                VolumeBar.Value = 0;
+                HookRendering(false);
             }
             base.OnStateChanged(e);
         }
@@ -440,6 +471,9 @@ namespace PicoMicDrainer
                                 this.Show();
                                 this.WindowState = WindowState.Normal;
                                 this.Activate();
+
+                                // バグ8修正：再表示に合わせて描画フレーム同期イベントを再接続する
+                                HookRendering(true);
 
                                 // 専用のアップデートパネルを表示状態にする
                                 UpdatePanel.Visibility = Visibility.Visible;
@@ -524,6 +558,9 @@ namespace PicoMicDrainer
                     this.Show();
                     this.WindowState = WindowState.Normal;
                     this.Activate(); // ウィンドウをアクティブ（最前面）にする
+
+                    // バグ8修正：再表示に合わせて描画フレーム同期イベントを再接続する
+                    HookRendering(true);
                 });
             }
         }
