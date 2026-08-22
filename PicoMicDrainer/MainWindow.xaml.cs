@@ -187,24 +187,35 @@ namespace PicoMicDrainer
             // 再接続のため、古いインスタンスを先に破棄する
             DisposeWaveIn();
 
+            // バグD修正：ホットプラグ（PICO Connect の再起動等）中はデバイス列挙が COM 例外を投げる可能性がある。
+            // その場合は「デバイス未検出」として扱い、再接続はリトライタイマーに委ねる（ログは静かに保つ）。
             int deviceNumber = -1;
-            for (int i = 0; i < WaveIn.DeviceCount; i++)
+            string? productName = null;
+            try
             {
-                var capabilities = WaveIn.GetCapabilities(i);
-                if (capabilities.ProductName.IndexOf(TargetDeviceKeyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                for (int i = 0; i < WaveIn.DeviceCount; i++)
                 {
-                    deviceNumber = i;
-                    break;
+                    var capabilities = WaveIn.GetCapabilities(i);
+                    if (capabilities.ProductName.IndexOf(TargetDeviceKeyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        deviceNumber = i;
+                        productName = capabilities.ProductName;
+                        break;
+                    }
                 }
             }
+            catch (Exception)
+            {
+                // 列挙失敗（デバイスのホットプラグ最中等）→ 未検出として扱い、次の tick で再試行
+                return false;
+            }
 
-            if (deviceNumber == -1)
+            if (deviceNumber == -1 || productName == null)
             {
                 return false;
             }
 
-            var deviceInfo = WaveIn.GetCapabilities(deviceNumber);
-            AddLog(string.Format(Localization.SuccessDeviceDetected, deviceInfo.ProductName));
+            AddLog(string.Format(Localization.SuccessDeviceDetected, productName));
 
             try
             {
