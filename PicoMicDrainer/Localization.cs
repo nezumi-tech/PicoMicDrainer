@@ -58,7 +58,7 @@ namespace PicoMicDrainer
 
         public static string ErrorMicOpenFailed => IsJapanese
             ? "\n[エラー] マイクのオープンに失敗しました: {0}"
-            : "\n[Error] Failed to open microphone: {0}";
+            : "[Error] Failed to open microphone: {0}";
 
         public static string ErrorBrowserFailed => IsJapanese
             ? "[エラー] ブラウザを開けませんでした: {0}"
@@ -103,5 +103,15 @@ namespace PicoMicDrainer
         public static string MenuExit => IsJapanese
             ? "終了する"
             : "Exit";
+
+        // バグ7修正用：多重起動時の確認ダイアログ
+        public static string AlreadyRunningTitle => IsJapanese
+            ? "Pico Mic Drainer は実行中です"
+            : "Pico Mic Drainer is already running";
+
+        /// <summary>Yes = 重ねて起動する / No = このインスタンスを終了。</summary>
+        public static string AlreadyRunningMessage => IsJapanese
+            ? "すでに PicoMicDrainer が実行中です。\n重ねて起動しますか？"
+            : "PicoMicDrainer is already running.\nDo you want to start another instance?";
     }
 }
