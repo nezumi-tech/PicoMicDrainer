@@ -25,6 +25,11 @@ namespace PicoMicDrainer
         // 対象デバイスが未接続・ストリーム切断時の自動再試行間隔
         private static readonly TimeSpan ReconnectInterval = TimeSpan.FromSeconds(3);
 
+        // バグ2修正用：ログの最大保持行数。超過すると古い行から削除する。
+        private const int MaxLogLines = 500;
+        // 上限をこれだけ超過した時点でまとめてトリムする（毎回書かないためのバッファ量）
+        private const int LogTrimBatchSize = 100;
+
         private WaveInEvent? _waveIn;
         /// <summary>現在、マイクストリームを正常に消費できているか（StartRecording 成功〜停止までの状態）。</summary>
         private volatile bool _isStreamRunning = false;
@@ -290,14 +295,46 @@ namespace PicoMicDrainer
         private void AddLog(string message)
         {
             // UIを操作するため、確実にUIスレッド上で実行する
-            Dispatcher.Invoke(() =>
-            {
-                // ログのテキストを追記
-                LogText.Text += message + "\n";
+            Dispatcher.Invoke(() => AppendLogCore(message));
+        }
 
-                // ★追加：ScrollViewer を自動的に一番下までスクロールさせる
-                LogScrollViewer.ScrollToEnd();
-            });
+        /// <summary>ログを TextBlock に追記し、行数が上限を超えたら古い行を削除する。</summary>
+        private void AppendLogCore(string message)
+        {
+            // ログのテキストを追記
+            LogText.Text += message + "\n";
+
+            // バグ2修正：常駐アプリではログが無制限に増え続けるため、行数上限で古い行を切る。
+            // 毎回トリムすると重いので、MaxLogLines を LogTrimBatchSize だけ超過した時点でまとめて削除する。
+            string text = LogText.Text;
+
+            int newlineCount = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n') newlineCount++;
+            }
+
+            if (newlineCount > MaxLogLines + LogTrimBatchSize)
+            {
+                // MaxLogLines ちょうどまで戻す行数だけ、先頭から削除する
+                int linesToRemove = newlineCount - MaxLogLines;
+                int startIndex = 0;
+                for (int i = 0; i < text.Length && linesToRemove > 0; i++)
+                {
+                    if (text[i] == '\n')
+                    {
+                        linesToRemove--;
+                        if (linesToRemove == 0)
+                        {
+                            startIndex = i + 1;
+                        }
+                    }
+                }
+                LogText.Text = text.Substring(startIndex);
+            }
+
+            // ★追加：ScrollViewer を自動的に一番下までスクロールさせる
+            LogScrollViewer.ScrollToEnd();
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
