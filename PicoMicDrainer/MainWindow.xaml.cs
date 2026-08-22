@@ -1,4 +1,4 @@
-﻿using NAudio.CoreAudioApi;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using System;
 using System.Diagnostics;
@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Media; // CompositionTarget のために追加
+using System.Windows.Threading;
 
 namespace PicoMicDrainer
 {
@@ -21,7 +22,13 @@ namespace PicoMicDrainer
         private const string GithubOwner = "nezumi-tech";
         private const string GithubRepo = "PicoMicDrainer";
 
+        // 対象デバイスが未接続・ストリーム切断時の自動再試行間隔
+        private static readonly TimeSpan ReconnectInterval = TimeSpan.FromSeconds(3);
+
         private WaveInEvent? _waveIn;
+        /// <summary>現在、マイクストリームを正常に消費できているか（StartRecording 成功〜停止までの状態）。</summary>
+        private volatile bool _isStreamRunning = false;
+        private DispatcherTimer? _reconnectTimer;
         private NotifyIcon? _notifyIcon;
         private bool _isExitMode = false;
 
@@ -114,7 +121,18 @@ namespace PicoMicDrainer
             AddLog(Localization.AppTitle);
             AddLog(GetApplicationHeader());
             AddLog(Localization.SearchingDevices);
-            StartDraining();
+
+            if (!StartDraining())
+            {
+                // 起動時のみ「見つかりません」エラーをログに出す。
+                // 以降のタイマーによるリトライ中は静かに再チェックし、数秒ごとにログを連打しないようにする。
+                AddLog(string.Format(Localization.ErrorDeviceNotFound, TargetDeviceKeyword));
+            }
+
+            // 自動再接続のリトライを開始：デバイス未接続・ストリーム切断時は ReconnectInterval ごとに再接続を試みる
+            _reconnectTimer = new DispatcherTimer { Interval = ReconnectInterval };
+            _reconnectTimer.Tick += OnReconnectTick;
+            _reconnectTimer.Start();
 
             await CheckForUpdatesAsync();
         }
@@ -127,8 +145,15 @@ namespace PicoMicDrainer
             return $"--- Pico Mic Drainer v{cleanVersion} ---";
         }
 
-        private void StartDraining()
+        /// <summary>
+        /// 対象マイクの音声消費を開始する。成功したら true、デバイスが見つからない・開始失敗なら false を返す。
+        /// 「見つかりません」のログは呼び出し側が出す（リトライ中は静かにするため）。
+        /// </summary>
+        private bool StartDraining()
         {
+            // 再接続のため、古いインスタンスを先に破棄する
+            DisposeWaveIn();
+
             int deviceNumber = -1;
             for (int i = 0; i < WaveIn.DeviceCount; i++)
             {
@@ -142,8 +167,7 @@ namespace PicoMicDrainer
 
             if (deviceNumber == -1)
             {
-                AddLog(string.Format(Localization.ErrorDeviceNotFound, TargetDeviceKeyword));
-                return;
+                return false;
             }
 
             var deviceInfo = WaveIn.GetCapabilities(deviceNumber);
@@ -180,14 +204,59 @@ namespace PicoMicDrainer
                     _latestVolumePeak = max;
                 };
 
+                // ストリームが停止した（デバイス切断・PICO Connect のクラッシュ等）場合の処理
+                _waveIn.RecordingStopped += OnWaveInRecordingStopped;
+
                 _waveIn.StartRecording();
+                _isStreamRunning = true;
 
                 AddLog(Localization.StreamStarted);
+                return true;
             }
             catch (Exception ex)
             {
                 AddLog(string.Format(Localization.ErrorMicOpenFailed, ex.Message));
+                DisposeWaveIn();
+                return false;
             }
+        }
+
+        /// <summary>現在の録音インスタンスを停止・破棄する。</summary>
+        private void DisposeWaveIn()
+        {
+            _isStreamRunning = false;
+            if (_waveIn == null) return;
+            try { _waveIn.StopRecording(); } catch { /* 既に止まっている可能性があり無視してよい */ }
+            _waveIn.Dispose();
+            _waveIn = null;
+        }
+
+        /// <summary>
+        /// 録音ストリームが停止したイベント。異常停止（例外付き）のときのみログを出す。
+        /// 再接続そのものはリトライタイマー (_reconnectTimer) が担当する。
+        /// </summary>
+        private void OnWaveInRecordingStopped(object? sender, StoppedEventArgs e)
+        {
+            _isStreamRunning = false;
+
+            if (e.Exception != null && !_isExitMode)
+            {
+                AddLog(string.Format(Localization.ErrorStreamDisconnected, e.Exception.Message));
+            }
+        }
+
+        /// <summary>
+        /// リトライタイマーの tick。正常に消費中なら何もしない。
+        /// 未接続・切断中は StartDraining() を再呼び出しして再接続を試みる（成功時のみログが出る）。
+        /// </summary>
+        private void OnReconnectTick(object? sender, EventArgs e)
+        {
+            if (_isExitMode) return;
+
+            // 正常に消費中なら何もしない
+            if (_waveIn != null && _isStreamRunning) return;
+
+            StartDraining();
         }
 
         // チェックボックスの状態変更イベント
@@ -248,11 +317,15 @@ namespace PicoMicDrainer
             // 本当の終了処理
             CompositionTarget.Rendering -= OnRendering;
 
-            if (_waveIn != null)
+            // 再接続リトライタイマーを停止する
+            if (_reconnectTimer != null)
             {
-                _waveIn.StopRecording();
-                _waveIn.Dispose();
+                _reconnectTimer.Stop();
+                _reconnectTimer.Tick -= OnReconnectTick;
             }
+
+            DisposeWaveIn();
+
             if (_notifyIcon != null)
             {
                 _notifyIcon.Visible = false;

@@ -50,6 +50,12 @@ namespace PicoMicDrainer
             ? "\nマイクストリームの消費を開始しました！"
             : "\nStarted consuming microphone stream!";
 
+        // 再接続（バグ1修正用）関連のログ
+        /// <summary>ストリームが異常停止した（デバイス切断等）。以降はタイマーが自動で再接続を試みる。</summary>
+        public static string ErrorStreamDisconnected => IsJapanese
+            ? "\n[警告] マイクストリームが切断されました: {0}\n数秒ごとに自動で再接続を試みます..."
+            : "\n[Warning] Microphone stream disconnected: {0}\nAttempting to reconnect automatically every few seconds...";
+
         public static string ErrorMicOpenFailed => IsJapanese
             ? "\n[エラー] マイクのオープンに失敗しました: {0}"
             : "\n[Error] Failed to open microphone: {0}";
