@@ -77,6 +77,15 @@ namespace PicoMicDrainer
             ? "[エラー] スタートアップ設定の変更に失敗しました: {0}"
             : "[Error] Failed to change startup settings: {0}";
 
+        // バグ4修正用：スタートアップ登録の事前チェックで失敗した場合のログ
+        public static string ErrorStartupExeNotFound => IsJapanese
+            ? "\n[エラー] 現在実行中のプログラムのパスを特定できなかったため、スタートアップ設定を変更できません。"
+            : "\n[Error] Could not determine the running program path, so startup settings cannot be changed.";
+
+        public static string ErrorStartupComUnavailable => IsJapanese
+            ? "\n[エラー] ショートカット作成機能 (WScript.Shell) が利用できないため、スタートアップ設定を変更できません。"
+            : "\n[Error] The shortcut creation feature (WScript.Shell) is unavailable, so startup settings cannot be changed.";
+
         // Update notification
         public static string UpdateAvailableLog => IsJapanese
             ? "\n[通知] 最新バージョン (v{0}) が公開されました！"

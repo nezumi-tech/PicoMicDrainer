@@ -479,12 +479,35 @@ namespace PicoMicDrainer
             return Path.Combine(startupFolder, "Pico Mic Drainer.lnk");
         }
 
+        /// <summary>スタートアップショートカットが実際に存在するか（＝登録済みか）を安全に確認する。</summary>
+        private bool IsStartupShortcutPresent()
+        {
+            try
+            {
+                return File.Exists(GetStartupShortcutPath());
+            }
+            catch (Exception)
+            {
+                // 起動フォルダの取得失敗等は「未登録」と扱う
+                return false;
+            }
+        }
+
+        /// <summary>チェックボックスとパネルを実態（isRegistered）に合わせて復元する。</summary>
+        private void RevertStartupUi(bool isRegistered)
+        {
+            _isUpdatingStartupUI = true;
+            StartupCheck.IsChecked = isRegistered;
+            StartupPromptPanel.Visibility = isRegistered ? Visibility.Collapsed : Visibility.Visible;
+            _isUpdatingStartupUI = false;
+        }
+
         // 起動時のチェック処理
         private void CheckStartupStatus()
         {
             _isUpdatingStartupUI = true;
 
-            bool isRegistered = File.Exists(GetStartupShortcutPath());
+            bool isRegistered = IsStartupShortcutPresent();
             StartupCheck.IsChecked = isRegistered;
 
             // 未登録(false)ならパネルを表示、登録済み(true)なら隠す
@@ -516,8 +539,15 @@ namespace PicoMicDrainer
 
             string shortcutPath = GetStartupShortcutPath();
 
+            // バグ4修正：exe パスを取得できない場合はエラーをログにし、チェックを実態に合わせて戻す
+            // （従来は無言で return し、チェックは ON のまま何もしない状態になっていた）
             string? exePath = Process.GetCurrentProcess().MainModule?.FileName;
-            if (string.IsNullOrEmpty(exePath)) return;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                AddLog(Localization.ErrorStartupExeNotFound);
+                RevertStartupUi(IsStartupShortcutPresent());
+                return;
+            }
 
             try
             {
@@ -525,17 +555,21 @@ namespace PicoMicDrainer
                 {
                     // WScript.Shellを動的に呼び出してショートカットを作成
                     Type? t = Type.GetTypeFromProgID("WScript.Shell");
-                    if (t != null)
+                    if (t == null)
                     {
-                        dynamic shell = Activator.CreateInstance(t)!;
-                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                        shortcut.TargetPath = exePath;
-                        shortcut.WorkingDirectory = Path.GetDirectoryName(exePath);
-                        shortcut.Description = "Pico Mic Drainer";
-                        shortcut.Save();
-
-                        AddLog(Localization.StartupRegistered);
+                        AddLog(Localization.ErrorStartupComUnavailable);
+                        RevertStartupUi(IsStartupShortcutPresent());
+                        return;
                     }
+
+                    dynamic shell = Activator.CreateInstance(t)!;
+                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = exePath;
+                    shortcut.WorkingDirectory = Path.GetDirectoryName(exePath);
+                    shortcut.Description = "Pico Mic Drainer";
+                    shortcut.Save();
+
+                    AddLog(Localization.StartupRegistered);
                 }
                 else
                 {
@@ -544,10 +578,14 @@ namespace PicoMicDrainer
                         File.Delete(shortcutPath);
                         AddLog(Localization.StartupUnregistered);
                     }
+                    // ショートカットが存在しない場合は、すでに「未登録」の状態と一致しているため何もしない
                 }
             }
             catch (Exception ex)
             {
+                // バグ4修正：例外時はショートカットの実在を確認してUIを実態に合わせて戻す
+                // （例: 登録失敗→OFF / 削除失敗→実際にはまだ登録済みなのでON）
+                RevertStartupUi(IsStartupShortcutPresent());
                 AddLog(string.Format(Localization.ErrorStartupFailed, ex.Message));
             }
         }
