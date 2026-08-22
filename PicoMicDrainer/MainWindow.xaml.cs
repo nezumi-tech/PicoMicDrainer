@@ -436,6 +436,8 @@ namespace PicoMicDrainer
             try
             {
                 using var client = new HttpClient();
+                // バグ6修正：タイムアウトを設定し、オフライン・低速ネットワークでの無待機を防ぐ
+                client.Timeout = TimeSpan.FromSeconds(10);
                 // GitHub API は User-Agent ヘッダーが必須です
                 client.DefaultRequestHeaders.Add("User-Agent", "PicoMicDrainer-UpdateChecker");
 
@@ -454,8 +456,12 @@ namespace PicoMicDrainer
                     // "v1.0.1" などの先頭の 'v' を取り除いて "1.0.1" にする
                     string cleanTag = tagName.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? tagName.Substring(1) : tagName;
 
+                    // バグ6修正：Version.TryParse は "3.3.1-beta" のようなプリリリースタグで失敗するため、
+                    // '-' 以降のサフィックスを落として数値部分だけ比較する
+                    string versionPart = cleanTag.Split('-')[0];
+
                     // GitHubのバージョンと、現在のアプリのバージョン（.csprojで設定した値）を比較
-                    if (Version.TryParse(cleanTag, out Version? latestVersion))
+                    if (Version.TryParse(versionPart, out Version? latestVersion))
                     {
                         Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version!;
 
