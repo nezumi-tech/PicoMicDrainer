@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Platforms>AnyCPU;x64</Platforms>
     <!--（アップデートするたびにここを書き換える）-->
-    <Version>3.3.0</Version>
+    <Version>3.4.0</Version>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 

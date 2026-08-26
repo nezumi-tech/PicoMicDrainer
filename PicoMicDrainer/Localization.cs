@@ -50,9 +50,15 @@ namespace PicoMicDrainer
             ? "\nマイクストリームの消費を開始しました！"
             : "\nStarted consuming microphone stream!";
 
+        // 再接続（バグ1修正用）関連のログ
+        /// <summary>ストリームが異常停止した（デバイス切断等）。以降はタイマーが自動で再接続を試みる。</summary>
+        public static string ErrorStreamDisconnected => IsJapanese
+            ? "\n[警告] マイクストリームが切断されました: {0}\n数秒ごとに自動で再接続を試みます..."
+            : "\n[Warning] Microphone stream disconnected: {0}\nAttempting to reconnect automatically every few seconds...";
+
         public static string ErrorMicOpenFailed => IsJapanese
             ? "\n[エラー] マイクのオープンに失敗しました: {0}"
-            : "\n[Error] Failed to open microphone: {0}";
+            : "[Error] Failed to open microphone: {0}";
 
         public static string ErrorBrowserFailed => IsJapanese
             ? "[エラー] ブラウザを開けませんでした: {0}"
@@ -71,6 +77,15 @@ namespace PicoMicDrainer
             ? "[エラー] スタートアップ設定の変更に失敗しました: {0}"
             : "[Error] Failed to change startup settings: {0}";
 
+        // バグ4修正用：スタートアップ登録の事前チェックで失敗した場合のログ
+        public static string ErrorStartupExeNotFound => IsJapanese
+            ? "\n[エラー] 現在実行中のプログラムのパスを特定できなかったため、スタートアップ設定を変更できません。"
+            : "\n[Error] Could not determine the running program path, so startup settings cannot be changed.";
+
+        public static string ErrorStartupComUnavailable => IsJapanese
+            ? "\n[エラー] ショートカット作成機能 (WScript.Shell) が利用できないため、スタートアップ設定を変更できません。"
+            : "\n[Error] The shortcut creation feature (WScript.Shell) is unavailable, so startup settings cannot be changed.";
+
         // Update notification
         public static string UpdateAvailableLog => IsJapanese
             ? "\n[通知] 最新バージョン (v{0}) が公開されました！"
@@ -88,5 +103,15 @@ namespace PicoMicDrainer
         public static string MenuExit => IsJapanese
             ? "終了する"
             : "Exit";
+
+        // バグ7修正用：多重起動時の確認ダイアログ
+        public static string AlreadyRunningTitle => IsJapanese
+            ? "Pico Mic Drainer は実行中です"
+            : "Pico Mic Drainer is already running";
+
+        /// <summary>Yes = 重ねて起動する / No = このインスタンスを終了。</summary>
+        public static string AlreadyRunningMessage => IsJapanese
+            ? "すでに PicoMicDrainer が実行中です。\n重ねて起動しますか？"
+            : "PicoMicDrainer is already running.\nDo you want to start another instance?";
     }
 }
