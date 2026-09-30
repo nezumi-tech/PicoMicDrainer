@@ -22,8 +22,10 @@ namespace PicoMicDrainer
         private const string GithubOwner = "nezumi-tech";
         private const string GithubRepo = "PicoMicDrainer";
 
-        // 対象デバイスが未接続・ストリーム切断時の自動再試行間隔
+        // 対象デバイスが未接続・ストリーム切断時の自動再試行間隔（ベース値）
         private static readonly TimeSpan ReconnectInterval = TimeSpan.FromSeconds(3);
+        // 問題1修正用：リトライ間隔のバックオフ上限（毎秒COM列挙を繰り返さず、コストを抑えるため）
+        private const int MaxReconnectSeconds = 60;
 
         // バグ2修正用：ログの最大保持行数。超過すると古い行から削除する。
         private const int MaxLogLines = 500;
@@ -36,6 +38,9 @@ namespace PicoMicDrainer
         // 問題4修正：デバイス列挙・マイク開放の重なる防止（リトライタイマーと異常停止経路が同時発火しうる）
         private readonly object _drainLock = new();
         private bool _drainInProgress;
+
+        // 問題1修正：連続失敗回数。未接続中は再試行間隔を指数バックオフする。成功するとリセット。
+        private int _reconnectFailCount = 0;
 
         private WaveInEvent? _waveIn;
         /// <summary>現在、マイクストリームを正常に消費できているか（StartRecording 成功〜停止までの状態）。</summary>
@@ -311,6 +316,28 @@ namespace PicoMicDrainer
             }
         }
 
+        /// <summary>
+        /// 問題1修正：デバイス検出成功・失敗に応じてリトライ間隔を調整する。
+        /// 失敗時は指数バックオフ（3→6→12→...、上限60秒）、成功時はベース値へリセット。
+        /// </summary>
+        private void SetReconnectFailCount(bool success)
+        {
+            if (_reconnectTimer == null) return;
+
+            if (success)
+            {
+                // 正常に消費中に戻ったので、リトライ間隔と失敗カウントをリセット
+                _reconnectFailCount = 0;
+                _reconnectTimer.Interval = ReconnectInterval;
+                return;
+            }
+
+            // 未接続継続：指数バックオフで間隔を広げ、COM列挙コストを抑制する
+            _reconnectFailCount++;
+            double seconds = ReconnectInterval.TotalSeconds * Math.Pow(2, _reconnectFailCount);
+            _reconnectTimer.Interval = TimeSpan.FromSeconds(Math.Min(seconds, MaxReconnectSeconds));
+        }
+
         /// <summary>現在の録音インスタンスを停止・破棄する。</summary>
         private void DisposeWaveIn()
         {
@@ -358,7 +385,11 @@ namespace PicoMicDrainer
             // 正常に消費中なら何もしない
             if (_waveIn != null && _isStreamRunning) return;
 
-            await StartDrainingAsync();
+            // 問題4修正：別の経路（異常停止時）での列挙・開放が進行中の場合は待たせる
+            if (_drainInProgress) return;
+
+            bool success = await StartDrainingAsync();
+            SetReconnectFailCount(success);
         }
 
         // チェックボックスの状態変更イベント
@@ -376,8 +407,15 @@ namespace PicoMicDrainer
         {
             if (_isVisualizerEnabled)
             {
-                // 0.0〜1.0 のピーク値を 0〜100 のパーセンテージに変換してメーターに反映
-                VolumeBar.Value = _latestVolumePeak * 100;
+                double newValue = _latestVolumePeak * 100;
+
+                // 問題2修正：値が実質的に変わらない場合は書き込みをスキップ。
+                // 高リフレッシュレート表示（例: 240Hz）では毎フレームの ProgressBar 更新で
+                // 不要な再描画・レイアウトが発生しうるため、変化が小さい間は書き込まない。
+                if (Math.Abs(newValue - VolumeBar.Value) > 0.1)
+                {
+                    VolumeBar.Value = newValue;
+                }
 
                 // メーターがカクつかずスムーズに減少するよう、少しずつ減衰（フォールオフ）させる
                 _latestVolumePeak *= 0.85f;
