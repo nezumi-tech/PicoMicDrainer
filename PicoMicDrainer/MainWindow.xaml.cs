@@ -30,6 +30,9 @@ namespace PicoMicDrainer
         // 上限をこれだけ超過した時点でまとめてトリムする（毎回書かないためのバッファ量）
         private const int LogTrimBatchSize = 100;
 
+        // 問題3修正：ログの行数を保持。毎回の追記で全文を走査し直すのを避ける。
+        private int _logLineCount = 0;
+
         private WaveInEvent? _waveIn;
         /// <summary>現在、マイクストリームを正常に消費できているか（StartRecording 成功〜停止までの状態）。</summary>
         private volatile bool _isStreamRunning = false;
@@ -363,22 +366,27 @@ namespace PicoMicDrainer
         private void AppendLogCore(string message)
         {
             // ログのテキストを追記
-            LogText.Text += message + "\n";
+            string line = message + "\n";
+
+            // 問題3修正：追記したメッセージ内の改行をカウントし、保持している行数を更新する。
+            // 毎回の全文走査（O(n)）を避けるため、追加分だけ改行数を数える。
+            int addedNewlines = 1; // 末尾に追加する改行の分
+            for (int i = 0; i < message.Length; i++)
+            {
+                if (message[i] == '\n') addedNewlines++;
+            }
+            _logLineCount += addedNewlines;
+
+            LogText.Text += line;
 
             // バグ2修正：常駐アプリではログが無制限に増え続けるため、行数上限で古い行を切る。
             // 毎回トリムすると重いので、MaxLogLines を LogTrimBatchSize だけ超過した時点でまとめて削除する。
-            string text = LogText.Text;
-
-            int newlineCount = 0;
-            for (int i = 0; i < text.Length; i++)
+            if (_logLineCount > MaxLogLines + LogTrimBatchSize)
             {
-                if (text[i] == '\n') newlineCount++;
-            }
+                string text = LogText.Text;
 
-            if (newlineCount > MaxLogLines + LogTrimBatchSize)
-            {
                 // MaxLogLines ちょうどまで戻す行数だけ、先頭から削除する
-                int linesToRemove = newlineCount - MaxLogLines;
+                int linesToRemove = _logLineCount - MaxLogLines;
                 int startIndex = 0;
                 for (int i = 0; i < text.Length && linesToRemove > 0; i++)
                 {
@@ -392,6 +400,9 @@ namespace PicoMicDrainer
                     }
                 }
                 LogText.Text = text.Substring(startIndex);
+
+                // 問題3修正：トリム後は行数をMaxLogLinesに固定する。
+                _logLineCount = MaxLogLines;
             }
 
             // ★追加：ScrollViewer を自動的に一番下までスクロールさせる
