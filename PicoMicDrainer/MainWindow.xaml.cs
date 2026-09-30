@@ -33,6 +33,10 @@ namespace PicoMicDrainer
         // 問題3修正：ログの行数を保持。毎回の追記で全文を走査し直すのを避ける。
         private int _logLineCount = 0;
 
+        // 問題4修正：デバイス列挙・マイク開放の重なる防止（リトライタイマーと異常停止経路が同時発火しうる）
+        private readonly object _drainLock = new();
+        private bool _drainInProgress;
+
         private WaveInEvent? _waveIn;
         /// <summary>現在、マイクストリームを正常に消費できているか（StartRecording 成功〜停止までの状態）。</summary>
         private volatile bool _isStreamRunning = false;
@@ -158,7 +162,7 @@ namespace PicoMicDrainer
             AddLog(GetApplicationHeader());
             AddLog(Localization.SearchingDevices);
 
-            if (!StartDraining())
+            if (!(await StartDrainingAsync()))
             {
                 // 起動時のみ「見つかりません」エラーをログに出す。
                 // 以降のタイマーによるリトライ中は静かに再チェックし、数秒ごとにログを連打しないようにする。
@@ -182,17 +186,12 @@ namespace PicoMicDrainer
         }
 
         /// <summary>
-        /// 対象マイクの音声消費を開始する。成功したら true、デバイスが見つからない・開始失敗なら false を返す。
-        /// 「見つかりません」のログは呼び出し側が出す（リトライ中は静かにするため）。
+        /// バグD修正：ホットプラグ（PICO Connect の再起動等）中はデバイス列挙が COM 例外を投げる可能性がある。
+        /// その場合は「デバイス未検出」として扱い、再接続はリトライタイマーに委ねる（ログは静かに保つ）。
         /// </summary>
-        private bool StartDraining()
+        private (int? deviceNumber, string? productName) FindTargetDevice()
         {
-            // 再接続のため、古いインスタンスを先に破棄する
-            DisposeWaveIn();
-
-            // バグD修正：ホットプラグ（PICO Connect の再起動等）中はデバイス列挙が COM 例外を投げる可能性がある。
-            // その場合は「デバイス未検出」として扱い、再接続はリトライタイマーに委ねる（ログは静かに保つ）。
-            int deviceNumber = -1;
+            int? deviceNumber = null;
             string? productName = null;
             try
             {
@@ -210,61 +209,105 @@ namespace PicoMicDrainer
             catch (Exception)
             {
                 // 列挙失敗（デバイスのホットプラグ最中等）→ 未検出として扱い、次の tick で再試行
-                return false;
+                return (null, null);
             }
 
-            if (deviceNumber == -1 || productName == null)
+            if (deviceNumber == null || productName == null)
             {
-                return false;
+                return (null, null);
             }
 
-            AddLog(string.Format(Localization.SuccessDeviceDetected, productName));
+            return (deviceNumber, productName);
+        }
+
+        /// <summary>
+        /// 対象マイクの音声消費を開始する。成功したら true、デバイスが見つからない・開始失敗なら false を返す。
+        /// 「見つかりません」のログは呼び出し側が出す（リトライ中は静かにするため）。
+        /// </summary>
+        private async Task<bool> StartDrainingAsync()
+        {
+            // 問題4修正：列挙・開放が進行中の場合は即座に false を返し、マイクを二重に開かない。
+            if (_drainInProgress) return false;
+
+            lock (_drainLock)
+            {
+                // 先ほどのチェックとの競合を防ぐため、ロック内でも再確認する
+                if (_drainInProgress) return false;
+                _drainInProgress = true;
+            }
 
             try
             {
-                _waveIn = new WaveInEvent
-                {
-                    DeviceNumber = deviceNumber,
-                    WaveFormat = new WaveFormat(48000, 1), // 48kHz, モノラル (16bit PCM)
-                    BufferMilliseconds = 50
-                };
-
-                // データ受信時の処理（超軽量化設計）
-                _waveIn.DataAvailable += (s, a) =>
-                {
-                    // チェックボックスがオフなら、解析を一切スキップして即座に終了（バッファ消費最優先）
-                    if (!_isVisualizerEnabled) return;
-
-                    float max = 0f;
-                    // 16bit PCMは2バイトで1サンプル。バッファ内の最大絶対値を検索
-                    for (int i = 0; i < a.BytesRecorded; i += 2)
-                    {
-                        short sample = BitConverter.ToInt16(a.Buffer, i);
-                        float sample32 = sample / 32768f; // -1.0 〜 1.0 に正規化
-                        if (Math.Abs(sample32) > max)
-                        {
-                            max = Math.Abs(sample32);
-                        }
-                    }
-
-                    // 最新のピーク値を保持（UIスレッド側がこれを拾って描画する）
-                    _latestVolumePeak = max;
-                };
-
-                // ストリームが停止した（デバイス切断・PICO Connect のクラッシュ等）場合の処理
-                _waveIn.RecordingStopped += OnWaveInRecordingStopped;
-
-                _waveIn.StartRecording();
-                _isStreamRunning = true;
-
-                AddLog(Localization.StreamStarted);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                AddLog(string.Format(Localization.ErrorMicOpenFailed, ex.Message));
+                // 再接続のため、古いインスタンスを先に破棄する
                 DisposeWaveIn();
-                return false;
+
+                // 問題4修正：デバイス列挙は COM 呼び出しが多く、UI スレッドで実行すると
+                // フリーズ・フレイカースの原因となるため、バックグラウンドスレッドで実行する。
+                var (deviceNumber, productName) = await Task.Run(FindTargetDevice);
+
+                // 列挙中に終了処理が開始された場合は中止する
+                if (_isExitMode || _isShuttingDown) return false;
+
+                if (deviceNumber == null || productName == null)
+                {
+                    return false;
+                }
+
+                AddLog(string.Format(Localization.SuccessDeviceDetected, productName));
+
+                try
+                {
+                    _waveIn = new WaveInEvent
+                    {
+                        DeviceNumber = deviceNumber.Value,
+                        WaveFormat = new WaveFormat(48000, 1), // 48kHz, モノラル (16bit PCM)
+                        BufferMilliseconds = 50
+                    };
+
+                    // データ受信時の処理（超軽量化設計）
+                    _waveIn.DataAvailable += (s, a) =>
+                    {
+                        // チェックボックスがオフなら、解析を一切スキップして即座に終了（バッファ消費最優先）
+                        if (!_isVisualizerEnabled) return;
+
+                        float max = 0f;
+                        // 16bit PCMは2バイトで1サンプル。バッファ内の最大絶対値を検索
+                        for (int i = 0; i < a.BytesRecorded; i += 2)
+                        {
+                            short sample = BitConverter.ToInt16(a.Buffer, i);
+                            float sample32 = sample / 32768f; // -1.0 〜 1.0 に正規化
+                            if (Math.Abs(sample32) > max)
+                            {
+                                max = Math.Abs(sample32);
+                            }
+                        }
+
+                        // 最新のピーク値を保持（UIスレッド側がこれを拾って描画する）
+                        _latestVolumePeak = max;
+                    };
+
+                    // ストリームが停止した（デバイス切断・PICO Connect のクラッシュ等）場合の処理
+                    _waveIn.RecordingStopped += OnWaveInRecordingStopped;
+
+                    _waveIn.StartRecording();
+                    _isStreamRunning = true;
+
+                    AddLog(Localization.StreamStarted);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    AddLog(string.Format(Localization.ErrorMicOpenFailed, ex.Message));
+                    DisposeWaveIn();
+                    return false;
+                }
+            }
+            finally
+            {
+                lock (_drainLock)
+                {
+                    _drainInProgress = false;
+                }
             }
         }
 
@@ -299,7 +342,8 @@ namespace PicoMicDrainer
 
                 // バグC修正：異常停止（デバイス切断・PICO Connect のクラッシュ等）時は即座に再接続を試みる。
                 // 従来はリトライタイマーの次 tick まで（最大 ReconnectInterval = 3秒）バッファ消費が止まったままになっていた。
-                Dispatcher.BeginInvoke(new Action(() => { StartDraining(); }));
+                // 問題4修正：StartDrainingAsync が内部で重複防止を行うため、UI スレッド遷移不要
+                _ = StartDrainingAsync();
             }
         }
 
@@ -307,14 +351,14 @@ namespace PicoMicDrainer
         /// リトライタイマーの tick。正常に消費中なら何もしない。
         /// 未接続・切断中は StartDraining() を再呼び出しして再接続を試みる（成功時のみログが出る）。
         /// </summary>
-        private void OnReconnectTick(object? sender, EventArgs e)
+        private async void OnReconnectTick(object? sender, EventArgs e)
         {
             if (_isExitMode || _isShuttingDown) return;
 
             // 正常に消費中なら何もしない
             if (_waveIn != null && _isStreamRunning) return;
 
-            StartDraining();
+            await StartDrainingAsync();
         }
 
         // チェックボックスの状態変更イベント
